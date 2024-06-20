@@ -127,10 +127,8 @@ func (e Engine) Exec(s StrategyFunc) Command {
 			normalized := game.Normalize(score, -10, 10)
 
 			switch game.Place() {
-			case 1:
-				normalized *= 3
 			case 2:
-				normalized *= 1
+				normalized *= 2
 			case 3:
 				normalized *= 5
 			}
@@ -462,10 +460,9 @@ func (d Diving) Eval(c Command) int {
 	}
 
 	// Simulate matching the remaining sequence
-	// for i := range d.goal {
-	// 	score += player.combo + i
-	// }
-	score = player.combo + 1
+	for i := range d.goal {
+		score += player.combo + i
+	}
 
 	return score
 }
@@ -473,8 +470,8 @@ func (d Diving) Eval(c Command) int {
 func (d Diving) Normalize(score, min, max int) int {
 	// The actual maximum score is based on the remaining sequence and combos that can be achieved from now on
 	// Calculate the maximum possible score from the remaining sequence
-	player := d.players[d.playerIdx]
 	actualMax := 0
+	player := d.players[d.playerIdx]
 	for i := range d.goal {
 		actualMax += player.combo + i
 	}
