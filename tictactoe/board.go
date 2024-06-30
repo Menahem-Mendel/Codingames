@@ -7,18 +7,22 @@ type Move struct {
 	Col int
 }
 
-type Game struct {
+type Board struct {
 	board  [][]int
 	player Player
 	size   int
 }
 
-func NewGame(size int) *Game {
+func NewBoard(size int) *Board {
 	board := make([][]int, size)
 	for i := range board {
 		board[i] = make([]int, size)
+
+		for j := range board[i] {
+			board[i][j] = int(EMPTY)
+		}
 	}
-	return &Game{
+	return &Board{
 		board:  board,
 		player: PLAYER,
 		size:   size,
@@ -26,25 +30,25 @@ func NewGame(size int) *Game {
 }
 
 // Clone creates a deep copy of the game state
-func (g *Game) Clone() State {
-	newBoard := make([][]int, g.size)
+func (b *Board) Clone() State {
+	newBoard := make([][]int, b.size)
 	for i := range newBoard {
-		newBoard[i] = make([]int, g.size)
-		copy(newBoard[i], g.board[i])
+		newBoard[i] = make([]int, b.size)
+		copy(newBoard[i], b.board[i])
 	}
-	return &Game{
+	return &Board{
 		board:  newBoard,
-		player: g.player,
-		size:   g.size,
+		player: b.player,
+		size:   b.size,
 	}
 }
 
 // Actions returns a list of possible moves from the current state
-func (g *Game) Actions() []Action {
+func (b *Board) Actions() []Action {
 	var actions []Action
-	for row := 0; row < g.size; row++ {
-		for col := 0; col < g.size; col++ {
-			if g.board[row][col] != int(EMPTY) {
+	for row := 0; row < b.size; row++ {
+		for col := 0; col < b.size; col++ {
+			if b.board[row][col] != int(EMPTY) {
 				continue
 			}
 
@@ -56,45 +60,55 @@ func (g *Game) Actions() []Action {
 }
 
 // Exec applies a move to the game state
-func (g *Game) Exec(p Player, action Action) {
+func (b *Board) Exec(p Player, action Action) {
 	if action == nil {
 		return
 	}
 
 	move := action.(Move)
-	g.board[move.Row%g.size][move.Col%g.size] = int(g.player)
-	g.player = 3 - g.player
+	b.board[move.Row%b.size][move.Col%b.size] = int(b.player)
+	b.player = 3 - b.player
 }
 
 // IsEOG checks if the game is over
-func (g *Game) IsEOG() bool {
-	return g.checkWin(int(PLAYER)) || g.checkWin(int(OPPONENT)) || g.isBoardFull()
+func (b *Board) IsEOG() bool {
+	return b.checkWin(int(PLAYER)) || b.checkWin(int(OPPONENT)) || b.isBoardFull()
 }
 
 // Eval evaluates the game state and returns the result from the perspective of the given player
-func (g *Game) Eval(player Player) Result {
-	if g.checkWin(int(player)) {
+func (b *Board) Eval(player Player) Result {
+	// Example: Add weights to different winning scenarios or positions
+	if b.checkWin(int(player)) {
 		return 1.0
 	}
-	if g.checkWin(3 - int(player)) {
+	if b.checkWin(3 - int(player)) {
 		return -1.0
 	}
-	return 0.0
+	// Evaluate based on control of center, corners, etc.
+	controlScore := 0.0
+	if b.board[1][1] == int(player) {
+		controlScore += 0.5 // Center control
+	}
+	if b.board[0][0] == int(player) || b.board[0][2] == int(player) ||
+		b.board[2][0] == int(player) || b.board[2][2] == int(player) {
+		controlScore += 0.25 // Corner control
+	}
+	return Result(controlScore)
 }
 
 // Player returns the current player
-func (g *Game) Player() Player {
-	return g.player
+func (b *Board) Player() Player {
+	return b.player
 }
 
 // Helper methods
 
-func (g *Game) checkWin(player int) bool {
+func (b *Board) checkWin(player int) bool {
 	// Check rows
-	for row := 0; row < g.size; row++ {
+	for row := 0; row < b.size; row++ {
 		win := true
-		for col := 0; col < g.size; col++ {
-			if g.board[row][col] != player {
+		for col := 0; col < b.size; col++ {
+			if b.board[row][col] != player {
 				win = false
 				break
 			}
@@ -104,10 +118,10 @@ func (g *Game) checkWin(player int) bool {
 		}
 	}
 	// Check columns
-	for col := 0; col < g.size; col++ {
+	for col := 0; col < b.size; col++ {
 		win := true
-		for row := 0; row < g.size; row++ {
-			if g.board[row][col] != player {
+		for row := 0; row < b.size; row++ {
+			if b.board[row][col] != player {
 				win = false
 				break
 			}
@@ -118,8 +132,8 @@ func (g *Game) checkWin(player int) bool {
 	}
 	// Check diagonals
 	win := true
-	for i := 0; i < g.size; i++ {
-		if g.board[i][i] != player {
+	for i := 0; i < b.size; i++ {
+		if b.board[i][i] != player {
 			win = false
 			break
 		}
@@ -128,8 +142,8 @@ func (g *Game) checkWin(player int) bool {
 		return true
 	}
 	win = true
-	for i := 0; i < g.size; i++ {
-		if g.board[i][g.size-1-i] != player {
+	for i := 0; i < b.size; i++ {
+		if b.board[i][b.size-1-i] != player {
 			win = false
 			break
 		}
@@ -137,10 +151,10 @@ func (g *Game) checkWin(player int) bool {
 	return win
 }
 
-func (g *Game) isBoardFull() bool {
-	for row := 0; row < g.size; row++ {
-		for col := 0; col < g.size; col++ {
-			if g.board[row][col] == int(EMPTY) {
+func (b *Board) isBoardFull() bool {
+	for _, row := range b.board {
+		for _, cell := range row {
+			if cell == int(EMPTY) {
 				return false
 			}
 		}
@@ -150,7 +164,7 @@ func (g *Game) isBoardFull() bool {
 
 // Implementing Action interface for Move
 func (m Move) Apply(s State) State {
-	game := s.(*Game)
+	game := s.(*Board)
 	game.Exec(game.player, m)
 	return game
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"sync"
 )
 
@@ -73,27 +75,30 @@ func MCTS(ctx context.Context, state State) Action {
 				default:
 					node := treePolicy(ctx, root)
 					if node == nil {
+						fmt.Fprintln(os.Stderr, "ERROR: treePolicy returned nil")
 						return
 					}
 					reward := defaultPolicy(ctx, node.state)
 					if reward == -math.MaxFloat64 {
+						fmt.Fprintln(os.Stderr, "ERROR: defaultPolicy returned -Inf reward")
 						return
 					}
 					backpropagate(ctx, node, reward)
-
 				}
 			}
 		}()
 	}
 	wg.Wait()
 
-	return bestChild(root, 0).action
+	best := bestChild(root, 0)
+	if best == nil {
+		fmt.Fprintln(os.Stderr, "ERROR: bestChild returned nil")
+		return nil
+	}
+	return best.action
 }
 
-// treePolicy selects a node to expand
 func treePolicy(ctx context.Context, node *Node) *Node {
-	node.Lock()
-	defer node.Unlock()
 	for !node.state.IsEOG() {
 		select {
 		case <-ctx.Done():
@@ -103,6 +108,10 @@ func treePolicy(ctx context.Context, node *Node) *Node {
 				return expand(node)
 			}
 			node = bestChild(node, 1.0)
+			if node == nil {
+				fmt.Fprintln(os.Stderr, "ERROR: bestChild returned nil during treePolicy")
+				return nil
+			}
 		}
 	}
 	return node
@@ -130,19 +139,31 @@ func expand(node *Node) *Node {
 
 // defaultPolicy simulates a random playout from the given state
 func defaultPolicy(ctx context.Context, state State) float64 {
-	clone := state.Clone()
-	for !clone.IsEOG() {
+	stateClone := state.Clone()
+	for !stateClone.IsEOG() {
 		select {
 		case <-ctx.Done():
 			return -math.MaxFloat64
 		default:
-			actions := clone.Actions()
-			action := actions[rand.Intn(len(actions))]
-			clone.Exec(clone.Player(), action)
+			actions := stateClone.Actions()
+			// Example: Prefer center and corners in rollouts
+			var bestAction Action
+			for _, action := range actions {
+				move := action.(Move)
+				if (move.Row == 1 && move.Col == 1) || // Center
+					(move.Row == 0 && move.Col == 0) || (move.Row == 0 && move.Col == 2) ||
+					(move.Row == 2 && move.Col == 0) || (move.Row == 2 && move.Col == 2) { // Corners
+					bestAction = action
+					break
+				}
+			}
+			if bestAction == nil {
+				bestAction = actions[rand.Intn(len(actions))]
+			}
+			stateClone.Exec(stateClone.Player(), bestAction)
 		}
 	}
-
-	return float64(clone.Eval(clone.Player()))
+	return float64(stateClone.Eval(stateClone.Player()))
 }
 
 func backpropagate(ctx context.Context, node *Node, reward float64) {
